@@ -14,12 +14,21 @@ workflows:
           # 1. Install the tool
           pip install codemagic-cli-tools
           
-          # 2. Force the Mac to find the tool we just installed
-          export PATH="$PATH:$(python3 -m site --user-base)/bin"
+          # 2. HUNT DOWN the tool (Stop guessing the path)
+          echo "Searching for unity-installer executable..."
+          INSTALLER=$(find /Users/builder -name "unity-installer" -type f -perm +111 | head -n 1)
           
-          # 3. Run the installer immediately in the same window
+          if [ -z "$INSTALLER" ]; then
+            echo "Installer not found! listing pip folders for debug:"
+            pip show codemagic-cli-tools
+            exit 1
+          fi
+
+          echo "Found installer at: $INSTALLER"
+          
+          # 3. Run it using the specific path found
           echo "Downloading Unity $UNITY_VERSION... this will take several minutes."
-          unity-installer --version $UNITY_VERSION --platform ios
+          $INSTALLER --version $UNITY_VERSION --platform ios
       - name: Locate Unity
         script: |
           # Finds the newly installed Unity 6 binary
@@ -65,7 +74,7 @@ workflows:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            AD_HOC_CODE_SIGN_IDENTITY=YES \
             build
     artifacts:
       - build/ios/build/Release-iphoneos/*.app
