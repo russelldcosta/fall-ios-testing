@@ -10,7 +10,7 @@ workflows:
         # DOUBLE CHECK THIS NUMBER! 
         # Is it 6000.0.26f1? Or 6000.0.23f1?
         # I have set it to the most common Unity 6 version. Change it if yours differs.
-        UNITY_VERSION: "6000.0.26f1" 
+        UNITY_VERSION: "6000.2.6f2" 
     scripts:
       - name: Install Unity Engine
         script: |
