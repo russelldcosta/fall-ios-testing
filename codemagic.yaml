@@ -5,18 +5,22 @@ workflows:
     instance_type: mac_mini_m2
     environment:
       groups:
-        - unity # Ensure your UNITY_LICENSE is in this group!
+        - unity
       vars:
         UNITY_VERSION: "6000.2.6f2" 
     scripts:
+      - name: Setup Build Tools
+        script: |
+          # This installs the missing unity-installer tool
+          pip install codemagic-cli-tools
       - name: Install Unity 6
         script: |
-          # This command downloads and installs the exact version + iOS support
-          echo "Downloading Unity $UNITY_VERSION... this may take a few minutes."
+          echo "Downloading Unity $UNITY_VERSION and iOS Support..."
+          # Now that we installed the tool, we run it
           unity-installer --version $UNITY_VERSION --platform ios
       - name: Locate Unity
         script: |
-          # Setting the path to the newly installed Unity
+          # The installer puts it in a specific folder. Let's find it.
           UNITY_BIN="/Applications/Unity/Hub/Editor/$UNITY_VERSION/Unity.app/Contents/MacOS/Unity"
           echo "export UNITY_BIN=\"$UNITY_BIN\"" >> $CM_ENV
           echo "Unity located at: $UNITY_BIN"
