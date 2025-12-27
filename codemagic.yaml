@@ -7,33 +7,45 @@ workflows:
       groups:
         - unity
       vars:
-        # DOUBLE CHECK THIS NUMBER! 
-        # Is it 6000.0.26f1? Or 6000.0.23f1?
-        # I have set it to the most common Unity 6 version. Change it if yours differs.
+        # Confirmed version from your project
         UNITY_VERSION: "6000.2.6f2" 
     scripts:
-      - name: Install Unity Engine
+      - name: Install Unity Engine (Virtual Env Method)
         script: |
-          # 1. Install the tool
+          set -e # Exit immediately if any command fails
+          
+          echo "1. Creating a fresh Python Virtual Environment..."
+          # Create a folder named 'venv' in the current directory
+          python3 -m venv venv
+          
+          # Activate it (this forces the system to use THIS folder for everything)
+          source venv/bin/activate
+          
+          echo "2. Installing codemagic-cli-tools into the isolated environment..."
+          # Install the tool specifically into this folder
           pip install codemagic-cli-tools
           
-          # 2. Find the EXACT folder where Python hides executables
-          PY_BIN_DIR=$(python3 -c "import sys; print(sys.prefix)")/bin
-          echo "Python executable directory: $PY_BIN_DIR"
+          echo "3. Verifying the installer exists..."
+          # We know exactly where it is now: venv/bin/unity-installer
+          INSTALLER="./venv/bin/unity-installer"
           
-          # 3. Define the full path to the tool
-          INSTALLER="$PY_BIN_DIR/unity-installer"
+          if [ ! -f "$INSTALLER" ]; then
+            echo "CRITICAL: Installer still not found in venv. Listing venv/bin:"
+            ls -l venv/bin
+            exit 1
+          fi
           
-          # 4. Run it
-          echo "Downloading Unity $UNITY_VERSION..."
-          # We call the file directly by its full address
+          echo "4. Running Unity Installer..."
+          # Run the tool from our known location
           $INSTALLER --version $UNITY_VERSION --platform ios
+          
       - name: Locate Unity
         script: |
           # Finds the newly installed Unity binary
           UNITY_BIN=$(find /Applications/Unity/Hub/Editor -name "Unity" -type f -path "*/Contents/MacOS/Unity" | head -n 1)
           if [ -z "$UNITY_BIN" ]; then
-            echo "Unity not found after install! Check if UNITY_VERSION matches your project."
+            echo "Unity not found after install! Check if version $UNITY_VERSION matches the installed folder."
+            ls -R /Applications/Unity/Hub/Editor
             exit 1
           fi
           echo "export UNITY_BIN=\"$UNITY_BIN\"" >> $CM_ENV
@@ -46,7 +58,7 @@ workflows:
           public class BuildScript {
               public static void BuildIOS() {
                   BuildPlayerOptions options = new BuildPlayerOptions();
-                  // VERIFY: Is your scene named SampleScene?
+                  // Ensure this matches your Scene name exactly
                   options.scenes = new[] { "Assets/Scenes/SampleScene.unity" }; 
                   options.locationPathName = "build/ios";
                   options.target = BuildTarget.iOS;
@@ -57,7 +69,7 @@ workflows:
           EOF
       - name: Build Xcode Project
         script: |
-          $UNITY_BIN \
+          "$UNITY_BIN" \
             -batchmode \
             -quit \
             -projectPath . \
@@ -74,7 +86,7 @@ workflows:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            AD_HOC_CODE_SIGN_IDENTITY=YES \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
             build
     artifacts:
       - build/ios/build/Release-iphoneos/*.app
