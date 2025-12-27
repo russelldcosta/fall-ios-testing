@@ -7,76 +7,106 @@ workflows:
       groups:
         - unity
       vars:
-        # Confirmed version from your project
-        UNITY_VERSION: "6000.2.6f2" 
+        UNITY_VERSION: "6000.2.6f2"
     scripts:
-      - name: Install Unity Engine (Virtual Env Method)
+      - name: Install Unity Engine + iOS Support (Manual Method)
         script: |
-          set -e # Exit immediately if any command fails
+          set -e
           
-          echo "1. Creating a fresh Python Virtual Environment..."
-          # Create a folder named 'venv' in the current directory
-          python3 -m venv venv
+          echo "1. Installing changeset lookup tool..."
+          npm install -g unity-changeset
           
-          # Activate it (this forces the system to use THIS folder for everything)
-          source venv/bin/activate
+          echo "2. Finding Changeset UUID for Unity $UNITY_VERSION..."
+          CHANGESET=$(unity-changeset $UNITY_VERSION)
+          echo "Found Changeset: $CHANGESET"
           
-          echo "2. Installing codemagic-cli-tools into the isolated environment..."
-          # Install the tool specifically into this folder
-          pip install codemagic-cli-tools
-          
-          echo "3. Verifying the installer exists..."
-          # We know exactly where it is now: venv/bin/unity-installer
-          INSTALLER="./venv/bin/unity-installer"
-          
-          if [ ! -f "$INSTALLER" ]; then
-            echo "CRITICAL: Installer still not found in venv. Listing venv/bin:"
-            ls -l venv/bin
+          if [ -z "$CHANGESET" ]; then
+            echo "CRITICAL ERROR: Could not find changeset for $UNITY_VERSION."
             exit 1
           fi
           
-          echo "4. Running Unity Installer..."
-          # Run the tool from our known location
-          $INSTALLER --version $UNITY_VERSION --platform ios
+          # Base URL for Apple Silicon (M1/M2) Unity 6 Downloads
+          BASE_URL="https://download.unity3d.com/download_unity/$CHANGESET"
+          EDITOR_URL="$BASE_URL/MacEditorInstallerArm64/Unity-$UNITY_VERSION.pkg"
+          IOS_URL="$BASE_URL/MacEditorTargetInstallerArm64/UnitySetup-iOS-Support-for-Editor-$UNITY_VERSION.pkg"
           
-      - name: Locate Unity
+          echo "3. Downloading Unity Editor..."
+          echo "Source: $EDITOR_URL"
+          curl -o Unity.pkg "$EDITOR_URL"
+          
+          echo "4. Downloading iOS Build Support..."
+          echo "Source: $IOS_URL"
+          curl -o Unity_iOS.pkg "$IOS_URL"
+          
+          echo "5. Installing Unity Editor (This uses sudo)..."
+          sudo installer -pkg Unity.pkg -target /
+          
+          echo "6. Installing iOS Support..."
+          sudo installer -pkg Unity_iOS.pkg -target /
+          
+          echo "7. Cleaning up..."
+          rm Unity.pkg Unity_iOS.pkg
+          
+      - name: Locate Unity Executable
         script: |
-          # Finds the newly installed Unity binary
+          # We search for the binary because the install path can vary slightly
           UNITY_BIN=$(find /Applications/Unity/Hub/Editor -name "Unity" -type f -path "*/Contents/MacOS/Unity" | head -n 1)
+          
+          # Fallback: Check standard non-hub path
           if [ -z "$UNITY_BIN" ]; then
-            echo "Unity not found after install! Check if version $UNITY_VERSION matches the installed folder."
-            ls -R /Applications/Unity/Hub/Editor
+             UNITY_BIN=$(find /Applications/Unity -name "Unity" -type f -path "*/Contents/MacOS/Unity" | head -n 1)
+          fi
+
+          if [ -z "$UNITY_BIN" ]; then
+            echo "CRITICAL: Unity executable not found after manual install!"
+            echo "Listing /Applications/Unity content:"
+            ls -R /Applications/Unity* || echo "No Unity folder found"
             exit 1
           fi
+          
           echo "export UNITY_BIN=\"$UNITY_BIN\"" >> $CM_ENV
           echo "Unity located at: $UNITY_BIN"
-      - name: Create Editor Folder and Build Script
+
+      - name: Create Build Script
         script: |
           mkdir -p Assets/Editor
           cat <<EOF > Assets/Editor/BuildScript.cs
           using UnityEditor;
+          using UnityEngine;
+
           public class BuildScript {
               public static void BuildIOS() {
                   BuildPlayerOptions options = new BuildPlayerOptions();
-                  // Ensure this matches your Scene name exactly
+                  // Update this path if your scene is in a different folder
                   options.scenes = new[] { "Assets/Scenes/SampleScene.unity" }; 
                   options.locationPathName = "build/ios";
                   options.target = BuildTarget.iOS;
                   options.options = BuildOptions.None;
-                  BuildPipeline.BuildPlayer(options);
+                  
+                  var report = BuildPipeline.BuildPlayer(options);
+                  
+                  if (report.summary.result == UnityEditor.Build.Reporting.BuildResult.Succeeded) {
+                      Debug.Log("Build succeeded!");
+                  } else {
+                      Debug.LogError("Build failed");
+                      EditorApplication.Exit(1);
+                  }
               }
           }
           EOF
-      - name: Build Xcode Project
+          
+      - name: Run Unity Build
         script: |
           "$UNITY_BIN" \
             -batchmode \
+            -nographics \
             -quit \
             -projectPath . \
             -executeMethod BuildScript.BuildIOS \
             -buildTarget iOS \
             -logFile /dev/stdout
-      - name: Build Unsigned App
+            
+      - name: Build Unsigned IPA (Xcode)
         script: |
           cd build/ios
           xcodebuild -project Unity-iPhone.xcodeproj \
