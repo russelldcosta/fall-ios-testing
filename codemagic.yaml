@@ -11,13 +11,21 @@ workflows:
     scripts:
       - name: Locate Unity
         script: |
-          # This finds the Unity executable automatically
-          UNITY_BIN=$(find /Applications -name "Unity" -type f -path "*/Contents/MacOS/Unity" | head -n 1)
+          # Searching for the actual executable inside the Applications folder
+          echo "Searching for Unity executable..."
+          UNITY_BIN=$(find /Applications -name "Unity" -type f -path "*Unity.app/Contents/MacOS/Unity" | head -n 1)
+          
           if [ -z "$UNITY_BIN" ]; then
-            echo "Unity not found! Available Applications:"
-            ls /Applications
+            echo "Direct path failed, searching broader..."
+            UNITY_BIN=$(find /Applications/Unity -name "Unity" -type f | grep "Contents/MacOS/Unity" | head -n 1)
+          fi
+
+          if [ -z "$UNITY_BIN" ]; then
+            echo "Unity not found! Printing folder structure for help:"
+            ls -R /Applications/Unity
             exit 1
           fi
+
           echo "Found Unity at: $UNITY_BIN"
           echo "export UNITY_BIN=\"$UNITY_BIN\"" >> $CM_ENV
       - name: Create Editor Folder
@@ -29,8 +37,7 @@ workflows:
           public class BuildScript {
               public static void BuildIOS() {
                   BuildPlayerOptions options = new BuildPlayerOptions();
-                  // DOUBLE CHECK: Is your scene actually named SampleScene? 
-                  // If not, change 'SampleScene' below to your scene's name!
+                  // Change 'SampleScene' if your scene has a different name
                   options.scenes = new[] { "Assets/Scenes/SampleScene.unity" }; 
                   options.locationPathName = "build/ios";
                   options.target = BuildTarget.iOS;
