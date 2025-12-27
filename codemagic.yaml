@@ -9,31 +9,35 @@ workflows:
       vars:
         UNITY_VERSION: "6000.2.6f2" 
     scripts:
-      - name: Setup Build Tools
+      - name: Install Unity Engine
         script: |
-          # This installs the missing unity-installer tool
+          # 1. Install the tool
           pip install codemagic-cli-tools
-      - name: Install Unity 6
-        script: |
-          echo "Downloading Unity $UNITY_VERSION and iOS Support..."
-          # Now that we installed the tool, we run it
+          
+          # 2. Force the Mac to find the tool we just installed
+          export PATH="$PATH:$(python3 -m site --user-base)/bin"
+          
+          # 3. Run the installer immediately in the same window
+          echo "Downloading Unity $UNITY_VERSION... this will take several minutes."
           unity-installer --version $UNITY_VERSION --platform ios
       - name: Locate Unity
         script: |
-          # The installer puts it in a specific folder. Let's find it.
-          UNITY_BIN="/Applications/Unity/Hub/Editor/$UNITY_VERSION/Unity.app/Contents/MacOS/Unity"
+          # Finds the newly installed Unity 6 binary
+          UNITY_BIN=$(find /Applications/Unity/Hub/Editor -name "Unity" -type f -path "*/Contents/MacOS/Unity" | head -n 1)
+          if [ -z "$UNITY_BIN" ]; then
+            echo "Unity not found after install!"
+            exit 1
+          fi
           echo "export UNITY_BIN=\"$UNITY_BIN\"" >> $CM_ENV
           echo "Unity located at: $UNITY_BIN"
-      - name: Create Editor Folder
-        script: mkdir -p Assets/Editor
-      - name: Create Build Script
+      - name: Create Editor Folder and Build Script
         script: |
+          mkdir -p Assets/Editor
           cat <<EOF > Assets/Editor/BuildScript.cs
           using UnityEditor;
           public class BuildScript {
               public static void BuildIOS() {
                   BuildPlayerOptions options = new BuildPlayerOptions();
-                  // VERIFY: Make sure your scene is named SampleScene.unity
                   options.scenes = new[] { "Assets/Scenes/SampleScene.unity" }; 
                   options.locationPathName = "build/ios";
                   options.target = BuildTarget.iOS;
