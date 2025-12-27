@@ -1,0 +1,51 @@
+workflows:
+  unity-ios-build:
+    name: Unity iOS Unsigned Build
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      groups:
+        - unity
+      vars:
+        UNITY_VERSION: "6000.2.6f2"
+    scripts:
+      - name: Create Editor Folder
+        script: mkdir -p Assets/Editor
+      - name: Create Build Script
+        script: |
+          cat <<EOF > Assets/Editor/BuildScript.cs
+          using UnityEditor;
+          public class BuildScript {
+              public static void BuildIOS() {
+                  BuildPlayerOptions options = new BuildPlayerOptions();
+                  options.scenes = new[] { "Assets/Scenes/SampleScene.unity" };
+                  options.locationPathName = "build/ios";
+                  options.target = BuildTarget.iOS;
+                  options.options = BuildOptions.None;
+                  BuildPipeline.BuildPlayer(options);
+              }
+          }
+          EOF
+      - name: Build Xcode Project
+        script: |
+          $UNITY_HOME/Contents/MacOS/Unity \
+            -batchmode \
+            -quit \
+            -projectPath . \
+            -executeMethod BuildScript.BuildIOS \
+            -buildTarget iOS \
+            -logFile /dev/stdout
+      - name: Build Unsigned App
+        script: |
+          cd build/ios
+          xcodebuild -project Unity-iPhone.xcodeproj \
+            -scheme Unity-iPhone \
+            -configuration Release \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            build
+    artifacts:
+      - build/ios/build/Release-iphoneos/*.app
