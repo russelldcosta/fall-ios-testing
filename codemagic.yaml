@@ -7,34 +7,33 @@ workflows:
       groups:
         - unity
       vars:
-        UNITY_VERSION: "6000.2.6f2" 
+        # DOUBLE CHECK THIS NUMBER! 
+        # Is it 6000.0.26f1? Or 6000.0.23f1?
+        # I have set it to the most common Unity 6 version. Change it if yours differs.
+        UNITY_VERSION: "6000.0.26f1" 
     scripts:
       - name: Install Unity Engine
         script: |
           # 1. Install the tool
           pip install codemagic-cli-tools
           
-          # 2. HUNT DOWN the tool (Stop guessing the path)
-          echo "Searching for unity-installer executable..."
-          INSTALLER=$(find /Users/builder -name "unity-installer" -type f -perm +111 | head -n 1)
+          # 2. Find the EXACT folder where Python hides executables
+          PY_BIN_DIR=$(python3 -c "import sys; print(sys.prefix)")/bin
+          echo "Python executable directory: $PY_BIN_DIR"
           
-          if [ -z "$INSTALLER" ]; then
-            echo "Installer not found! listing pip folders for debug:"
-            pip show codemagic-cli-tools
-            exit 1
-          fi
-
-          echo "Found installer at: $INSTALLER"
+          # 3. Define the full path to the tool
+          INSTALLER="$PY_BIN_DIR/unity-installer"
           
-          # 3. Run it using the specific path found
-          echo "Downloading Unity $UNITY_VERSION... this will take several minutes."
+          # 4. Run it
+          echo "Downloading Unity $UNITY_VERSION..."
+          # We call the file directly by its full address
           $INSTALLER --version $UNITY_VERSION --platform ios
       - name: Locate Unity
         script: |
-          # Finds the newly installed Unity 6 binary
+          # Finds the newly installed Unity binary
           UNITY_BIN=$(find /Applications/Unity/Hub/Editor -name "Unity" -type f -path "*/Contents/MacOS/Unity" | head -n 1)
           if [ -z "$UNITY_BIN" ]; then
-            echo "Unity not found after install!"
+            echo "Unity not found after install! Check if UNITY_VERSION matches your project."
             exit 1
           fi
           echo "export UNITY_BIN=\"$UNITY_BIN\"" >> $CM_ENV
@@ -47,6 +46,7 @@ workflows:
           public class BuildScript {
               public static void BuildIOS() {
                   BuildPlayerOptions options = new BuildPlayerOptions();
+                  // VERIFY: Is your scene named SampleScene?
                   options.scenes = new[] { "Assets/Scenes/SampleScene.unity" }; 
                   options.locationPathName = "build/ios";
                   options.target = BuildTarget.iOS;
