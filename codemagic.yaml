@@ -1,14 +1,25 @@
 workflows:
   unity-ios-build:
-    name: Unity iOS Unsigned Build
+    name: Unity 6 iOS Build
     max_build_duration: 120
     instance_type: mac_mini_m2
     environment:
       groups:
         - unity
       vars:
-        UNITY_VERSION: "6000.2.6f2"
+        UNITY_VERSION: "6000.2.6f2" 
     scripts:
+      - name: Locate Unity
+        script: |
+          # This finds the Unity executable automatically
+          UNITY_BIN=$(find /Applications -name "Unity" -type f -path "*/Contents/MacOS/Unity" | head -n 1)
+          if [ -z "$UNITY_BIN" ]; then
+            echo "Unity not found! Available Applications:"
+            ls /Applications
+            exit 1
+          fi
+          echo "Found Unity at: $UNITY_BIN"
+          echo "export UNITY_BIN=\"$UNITY_BIN\"" >> $CM_ENV
       - name: Create Editor Folder
         script: mkdir -p Assets/Editor
       - name: Create Build Script
@@ -18,7 +29,9 @@ workflows:
           public class BuildScript {
               public static void BuildIOS() {
                   BuildPlayerOptions options = new BuildPlayerOptions();
-                  options.scenes = new[] { "Assets/Scenes/SampleScene.unity" };
+                  // DOUBLE CHECK: Is your scene actually named SampleScene? 
+                  // If not, change 'SampleScene' below to your scene's name!
+                  options.scenes = new[] { "Assets/Scenes/SampleScene.unity" }; 
                   options.locationPathName = "build/ios";
                   options.target = BuildTarget.iOS;
                   options.options = BuildOptions.None;
@@ -28,7 +41,7 @@ workflows:
           EOF
       - name: Build Xcode Project
         script: |
-          $UNITY_HOME/Contents/MacOS/Unity \
+          $UNITY_BIN \
             -batchmode \
             -quit \
             -projectPath . \
